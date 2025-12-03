@@ -2,58 +2,65 @@
 <html>
 <head>
 <title>KP Scan & Upload Document</title>
+
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.initiate.js"></script>
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
 
 <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: #f4f4f4;
-            height: 100vh;
-        }
-        #input-container {
-            display: flex;
-            gap: 10px;
-            position: fixed;
-            top: 10px;
-            background-color: #f4f4f4;
-            padding: 10px;
-            z-index: 1000;
-        }
-        #scan-button, #cancel-button {
-            width: 200px;
-            height: 35px;
-            font-size: 16px;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        #scan-button { background-color: #28a745; }
-        #scan-button:hover { background-color: #218838; }
-        #cancel-button { background-color: #dc3545; }
-        #cancel-button:hover { background-color: #c82333; }
+    body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background-color: #f4f4f4;
+        height: 100vh;
+    }
+    #input-container {
+        display: flex;
+        gap: 10px;
+        position: fixed;
+        top: 10px;
+        background-color: #f4f4f4;
+        padding: 10px;
+        z-index: 1000;
+    }
+    #scan-button, #cancel-button {
+        width: 200px;
+        height: 35px;
+        font-size: 16px;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    #scan-button { background-color: #28a745; }
+    #scan-button:hover { background-color: #218838; }
+    #cancel-button { background-color: #dc3545; }
+    #cancel-button:hover { background-color: #c82333; }
 
-        #dwtcontrolContainer {
-            width: 400px;
-            height: 500px;
-            background-color: white;
-            border: 2px solid #ccc;
-            margin-top: 60px;
-        }
+    #dwtcontrolContainer {
+        width: 500px;
+        height: 600px;
+        background-color: white;
+        border: 2px solid #ccc;
+        margin-top: 20px;
+    }
 
-        /* Preview styling */
-        #preview-container {
-            margin-top: 20px;
-            text-align: center;
-        }
-        #preview-image {
-            width: 400px;
-            border: 1px solid #aaa;
-        }
+    #preview-container {
+        margin-top: 40px;
+        text-align: center;
+    }
+    #preview-image {
+        width: 0px;
+        border: 1px solid #aaa;
+    }
+
+    #scan-count {
+        /* margin-top: 10px; */
+        font-size: 18px;
+        font-weight: bold;
+        color: #000;
+    }
 </style>
 </head>
 
@@ -64,76 +71,57 @@
     <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
 </div>
 
-<div id="dwtcontrolContainer"></div>
-
-<!-- ✅ Preview UI -->
+<!-- CUSTOM LARGE PREVIEW -->
 <div id="preview-container">
     <img id="preview-image" />
-    <div style="margin-top:10px;">
-        <button onclick="prevPage()">Previous</button>
-        <span id="page-info">Page 0 of 0</span>
-        <button onclick="nextPage()">Next</button>
-    </div>
+    <span id="page-info"></span>
+    <div id="scan-count">Scanned Pages: 0</div>
 </div>
+
+<!-- DWT VIEWER -->
+<div id="dwtcontrolContainer"></div>
 
 <script type="text/javascript">
 
 let DWTObject = null;
 let scannedBlob = null;
 
-let currentPage = 0;   // ✅ NEW
-
+/* ------------------ INIT ------------------ */
 Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
     DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+
+    if (DWTObject && DWTObject.Viewer) {
+        DWTObject.Viewer.bind(document.getElementById("dwtcontrolContainer"));
+        DWTObject.Viewer.show();
+    }
 });
 
-/* ------------------ Helper Functions ------------------ */
-
-function getQueryParameter(name) {
-    const params = new URLSearchParams(window.location.search);
-    return params.get(name) || "";
+/* ------------------ GET SCAN COUNT ------------------ */
+function getScanCount() {
+    if (!DWTObject) return 0;
+    return DWTObject.HowManyImagesInBuffer;
 }
 
-/* ------------------ PREVIEW FUNCTIONS ------------------ */
-
-// Display current scanned page
+/* ------------------ UPDATE PREVIEW ------------------ */
 function updatePreview() {
     if (!DWTObject) return;
 
-    const total = DWTObject.HowManyImagesInBuffer;
+    const total = getScanCount();
 
     if (total === 0) {
         document.getElementById("preview-image").src = "";
-        document.getElementById("page-info").innerText = "Page 0 of 0";
+        // document.getElementById("page-info").innerText = "Page 0 of 0";
+        document.getElementById("scan-count").innerText = "Scanned Pages: 0";
         return;
     }
 
-    if (currentPage < 0) currentPage = 0;
-    if (currentPage >= total) currentPage = total - 1;
-
-    const imageURL = DWTObject.GetImageURL(currentPage);
-
+    const imageURL = DWTObject.GetImageURL(0);
     document.getElementById("preview-image").src = imageURL;
-    document.getElementById("page-info").innerText =
-        `Page ${currentPage + 1} of ${total}`;
+    // document.getElementById("page-info").innerText = `Page 1 of ${total}`;
+    document.getElementById("scan-count").innerText = "Scanned Pages: " + total;
 }
 
-function nextPage() {
-    if (currentPage < DWTObject.HowManyImagesInBuffer - 1) {
-        currentPage++;
-        updatePreview();
-    }
-}
-
-function prevPage() {
-    if (currentPage > 0) {
-        currentPage--;
-        updatePreview();
-    }
-}
-
-/* ------------------ SCANNING ------------------ */
-
+/* ------------------ SCAN FUNCTION ------------------ */
 function AcquireImage() {
     if (!DWTObject) return;
 
@@ -152,13 +140,15 @@ function AcquireImage() {
             });
         })
         .then(() => {
-            updatePreview();   // ✅ Show preview immediately
+            updatePreview();
 
-            const count = DWTObject.HowManyImagesInBuffer;
-            const all = Array.from({ length: count }, (_, i) => i);
+            const count = getScanCount();
+            console.log("Scanned pages in dwtcontrolContainer:", count);
+
+            const allIndexes = Array.from({ length: count }, (_, i) => i);
 
             return DWTObject.ConvertToBlob(
-                all,
+                allIndexes,
                 Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF
             );
         })
@@ -169,8 +159,13 @@ function AcquireImage() {
         .catch(err => console.error(err.message || err));
 }
 
-/* ------------------ ONEDRIVE UPLOAD ------------------ */
+/* ------------------ GET URL PARAMS ------------------ */
+function getQueryParameter(name) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name) || "";
+}
 
+/* ------------------ ONEDRIVE UPLOAD ------------------ */
 async function uploadToOneDrive() {
     const accessToken = getQueryParameter("access_token");
     const fileName = getQueryParameter("file_name");
@@ -194,10 +189,12 @@ async function uploadToOneDrive() {
         });
 
         if (response.ok) {
-            const json = await response.json();
+            await response.json();
             alert("File uploaded successfully!");
 
             try { DWTObject.RemoveAllImages(); } catch(e) {}
+
+            updatePreview(); // resets scan count + preview
         }
         else {
             const text = await response.text();
@@ -211,9 +208,9 @@ async function uploadToOneDrive() {
 }
 
 /* ------------------ RESET ------------------ */
-
 function ResetContainer() {
-    location.reload();
+    try { DWTObject.RemoveAllImages(); } catch(e) {}
+    updatePreview();
 }
 
 </script>
