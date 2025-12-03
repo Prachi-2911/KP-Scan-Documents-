@@ -7,14 +7,17 @@
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        background-color: #f4f4f4;
-        height: 100vh;
-    }
+   body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+    overflow-y: hidden; /* 🔥 prevents vertical scrollbar */
+}
+
     #input-container {
         display: flex;
         gap: 10px;
@@ -47,9 +50,10 @@
     }
 
     #preview-container {
-        margin-top: 40px;
-        text-align: center;
-    }
+    margin-top: 60px; /* enough space for fixed buttons */
+    text-align: center;
+}
+
     #preview-image {
         width: 0px;
         border: 1px solid #aaa;
