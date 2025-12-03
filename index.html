@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>KP Scan & Upload Document</title>
+<script type="text/javascript" src="Resources/dynamsoft.webtwain.initiate.js"></script>
+<script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
+
+<style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f4;
+            height: 100vh;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+            position: fixed;
+            top: 10px;
+            background-color: #f4f4f4;
+            padding: 10px;
+            z-index: 1000;
+        }
+        #scan-button, #cancel-button {
+            width: 200px;
+            height: 35px;
+            font-size: 16px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #scan-button { background-color: #28a745; }
+        #scan-button:hover { background-color: #218838; }
+        #cancel-button { background-color: #dc3545; }
+        #cancel-button:hover { background-color: #c82333; }
+
+        #dwtcontrolContainer {
+            width: 400px;
+            height: 500px;
+            background-color: white;
+            border: 2px solid #ccc;
+            margin-top: 60px;
+        }
+
+        /* Preview styling */
+        #preview-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #preview-image {
+            width: 400px;
+            border: 1px solid #aaa;
+        }
+</style>
+</head>
+
+<body>
+
+<div id="input-container">
+    <input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
+    <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
+</div>
+
+<div id="dwtcontrolContainer"></div>
+
+<!-- ✅ Preview UI -->
+<div id="preview-container">
+    <img id="preview-image" />
+    <div style="margin-top:10px;">
+        <button onclick="prevPage()">Previous</button>
+        <span id="page-info">Page 0 of 0</span>
+        <button onclick="nextPage()">Next</button>
+    </div>
+</div>
+
+<script type="text/javascript">
+
+let DWTObject = null;
+let scannedBlob = null;
+
+let currentPage = 0;   // ✅ NEW
+
+Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
+    DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+});
+
+/* ------------------ Helper Functions ------------------ */
+
+function getQueryParameter(name) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name) || "";
+}
+
+/* ------------------ PREVIEW FUNCTIONS ------------------ */
+
+// Display current scanned page
+function updatePreview() {
+    if (!DWTObject) return;
+
+    const total = DWTObject.HowManyImagesInBuffer;
+
+    if (total === 0) {
+        document.getElementById("preview-image").src = "";
+        document.getElementById("page-info").innerText = "Page 0 of 0";
+        return;
+    }
+
+    if (currentPage < 0) currentPage = 0;
+    if (currentPage >= total) currentPage = total - 1;
+
+    const imageURL = DWTObject.GetImageURL(currentPage);
+
+    document.getElementById("preview-image").src = imageURL;
+    document.getElementById("page-info").innerText =
+        `Page ${currentPage + 1} of ${total}`;
+}
+
+function nextPage() {
+    if (currentPage < DWTObject.HowManyImagesInBuffer - 1) {
+        currentPage++;
+        updatePreview();
+    }
+}
+
+function prevPage() {
+    if (currentPage > 0) {
+        currentPage--;
+        updatePreview();
+    }
+}
+
+/* ------------------ SCANNING ------------------ */
+
+function AcquireImage() {
+    if (!DWTObject) return;
+
+    DWTObject.GetSourceNamesAsync()
+        .then(sources => {
+            if (sources.length === 0) {
+                alert("No scanner detected.");
+                return Promise.reject("No scanner available.");
+            }
+            return DWTObject.OpenSourceAsync();
+        })
+        .then(() => {
+            return DWTObject.AcquireImageAsync({
+                IfAppendImage: true,
+                IfCloseSourceAfterAcquire: true
+            });
+        })
+        .then(() => {
+            updatePreview();   // ✅ Show preview immediately
+
+            const count = DWTObject.HowManyImagesInBuffer;
+            const all = Array.from({ length: count }, (_, i) => i);
+
+            return DWTObject.ConvertToBlob(
+                all,
+                Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF
+            );
+        })
+        .then(result => {
+            scannedBlob = result;
+            uploadToOneDrive();
+        })
+        .catch(err => console.error(err.message || err));
+}
+
+/* ------------------ ONEDRIVE UPLOAD ------------------ */
+
+async function uploadToOneDrive() {
+    const accessToken = getQueryParameter("access_token");
+    const fileName = getQueryParameter("file_name");
+    const applicationType = getQueryParameter("application_type") || "application/pdf";
+
+    if (!accessToken || !fileName) {
+        alert("Missing access_token or file_name.");
+        return;
+    }
+
+    const uploadUrl = `https://graph.microsoft.com/${fileName}`;
+
+    try {
+        const response = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: {
+                "Authorization": `Bearer ${accessToken}`,
+                "Content-Type": applicationType
+            },
+            body: scannedBlob
+        });
+
+        if (response.ok) {
+            const json = await response.json();
+            alert("File uploaded successfully!");
+
+            try { DWTObject.RemoveAllImages(); } catch(e) {}
+        }
+        else {
+            const text = await response.text();
+            alert("Upload failed:\n" + text);
+        }
+    }
+    catch (err) {
+        alert("Unexpected error.");
+        console.error(err);
+    }
+}
+
+/* ------------------ RESET ------------------ */
+
+function ResetContainer() {
+    location.reload();
+}
+
+</script>
+</body>
+</html>
