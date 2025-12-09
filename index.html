@@ -2,221 +2,361 @@
 <html>
 <head>
 <title>KP Scan & Upload Document</title>
-
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.initiate.js"></script>
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
-
 <style>
-   body {
-    font-family: Arial, sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background-color: #f4f4f4;
-    margin: 0;
-    padding: 0;
-    overflow-y: hidden; /* 🔥 prevents vertical scrollbar */
-}
+
+    body {
+
+        font-family: Arial, sans-serif;
+
+        display: flex;
+
+        flex-direction: column;
+
+        align-items: center;
+
+        background-color: #f4f4f4;
+
+        height: 100vh;
+
+    }
 
     #input-container {
+
         display: flex;
+
         gap: 10px;
+
         position: fixed;
+
         top: 10px;
+
         background-color: #f4f4f4;
+
         padding: 10px;
+
         z-index: 1000;
+
+        align-items: center;
+
     }
-    #scan-button, #cancel-button {
-        width: 200px;
+
+    #scan-button, #upload-button, #cancel-button {
+
+        width: 180px;
+
         height: 35px;
-        font-size: 16px;
+
+        font-size: 15px;
+
         color: white;
+
         border: none;
+
         border-radius: 5px;
+
         cursor: pointer;
+
     }
+
     #scan-button { background-color: #28a745; }
+
     #scan-button:hover { background-color: #218838; }
+
+    #upload-button { background-color: #007bff; }
+
+    #upload-button:hover { background-color: #0069d9; }
+
     #cancel-button { background-color: #dc3545; }
+
     #cancel-button:hover { background-color: #c82333; }
 
     #dwtcontrolContainer {
-        width: 400px;
-        height: 500px;
+
+        width: 600px;
+
+        height: 600px;
+
         background-color: white;
+
         border: 2px solid #ccc;
-        margin-top: 20px;
+
+        margin-top: 60px;
+
     }
 
-    #preview-container {
-    margin-top: 60px; /* enough space for fixed buttons */
-    text-align: center;
-}
+    #pageCount {
 
-    #preview-image {
-        width: 0px;
-        border: 1px solid #aaa;
-    }
+        font-size: 14px;
 
-    #scan-count {
-        /* margin-top: 10px; */
-        font-size: 18px;
-        font-weight: bold;
-        color: #000;
+        margin-left: 12px;
+
     }
 </style>
 </head>
-
 <body>
-
 <div id="input-container">
-    <input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
-    <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
+<input type="button" id="scan-button" value="Scan Page" onclick="AcquireImage();" />
+<input type="button" id="upload-button" value="Create PDF & Upload" onclick="createPdfAndUpload();" />
+<input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
+<span id="pageCount">Pages: 0</span>
 </div>
-
-<!-- CUSTOM LARGE PREVIEW -->
-<div id="preview-container">
-    <img id="preview-image" />
-    <span id="page-info"></span>
-    <div id="scan-count">Scanned Pages: 0</div>
-</div>
-
-<!-- DWT VIEWER -->
 <div id="dwtcontrolContainer"></div>
-
+ 
 <script type="text/javascript">
 
-let DWTObject = null;
-let scannedBlob = null;
+    let DWTObject = null;
+ 
+    // Initialize Dynamsoft Web TWAIN
 
-/* ------------------ INIT ------------------ */
-Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-    DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+    Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
 
-    if (DWTObject && DWTObject.Viewer) {
-        DWTObject.Viewer.bind(document.getElementById("dwtcontrolContainer"));
-        DWTObject.Viewer.show();
+        DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+
+        updatePageCount();
+
+    });
+ 
+    function getQueryParameter(name) {
+
+        const params = new URLSearchParams(window.location.search);
+
+        return params.get(name) || "";
+
     }
-});
+ 
+    // Acquire one page and keep it in the buffer
 
-/* ------------------ GET SCAN COUNT ------------------ */
-function getScanCount() {
-    if (!DWTObject) return 0;
-    return DWTObject.HowManyImagesInBuffer;
-}
+    function AcquireImage() {
 
-/* ------------------ UPDATE PREVIEW ------------------ */
-function updatePreview() {
-    if (!DWTObject) return;
+        if (!DWTObject) {
 
-    const total = getScanCount();
+            alert("Scanner control is not ready yet.");
 
-    if (total === 0) {
-        document.getElementById("preview-image").src = "";
-        // document.getElementById("page-info").innerText = "Page 0 of 0";
-        document.getElementById("scan-count").innerText = "Scanned Pages: 0";
-        return;
-    }
+            return;
 
-    const imageURL = DWTObject.GetImageURL(0);
-    document.getElementById("preview-image").src = imageURL;
-    // document.getElementById("page-info").innerText = `Page 1 of ${total}`;
-    document.getElementById("scan-count").innerText = "Scanned Pages: " + total;
-}
+        }
+ 
+        DWTObject.GetSourceNamesAsync()
 
-/* ------------------ SCAN FUNCTION ------------------ */
-function AcquireImage() {
-    if (!DWTObject) return;
+            .then(sources => {
 
-    DWTObject.GetSourceNamesAsync()
-        .then(sources => {
-            if (sources.length === 0) {
-                alert("No scanner detected.");
-                return Promise.reject("No scanner available.");
-            }
-            return DWTObject.OpenSourceAsync();
-        })
-        .then(() => {
-            return DWTObject.AcquireImageAsync({
-                IfAppendImage: true,
-                IfCloseSourceAfterAcquire: true
+                if (!sources || sources.length === 0) {
+
+                    alert("No scanner detected. Please connect a scanner and try again.");
+
+                    return Promise.reject("No scanner available.");
+
+                }
+
+                return DWTObject.OpenSourceAsync();
+
+            })
+
+            .then(() => {
+
+                // Acquire one image; keep source open flag handled by API option
+
+                return DWTObject.AcquireImageAsync({
+
+                    IfShowUI: false,
+
+                    IfCloseSourceAfterAcquire: true
+
+                });
+
+            })
+
+            .then(() => {
+
+                // At this point the newly acquired page is in buffer.
+
+                updatePageCount();
+
+            })
+
+            .catch(exp => {
+
+                console.error("Acquire error:", exp && exp.message ? exp.message : exp);
+
             });
-        })
-        .then(() => {
-            updatePreview();
 
-            const count = getScanCount();
-            console.log("Scanned pages in dwtcontrolContainer:", count);
-
-            const allIndexes = Array.from({ length: count }, (_, i) => i);
-
-            return DWTObject.ConvertToBlob(
-                allIndexes,
-                Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF
-            );
-        })
-        .then(result => {
-            scannedBlob = result;
-            uploadToOneDrive();
-        })
-        .catch(err => console.error(err.message || err));
-}
-
-/* ------------------ GET URL PARAMS ------------------ */
-function getQueryParameter(name) {
-    const params = new URLSearchParams(window.location.search);
-    return params.get(name) || "";
-}
-
-/* ------------------ ONEDRIVE UPLOAD ------------------ */
-async function uploadToOneDrive() {
-    const accessToken = getQueryParameter("access_token");
-    const fileName = getQueryParameter("file_name");
-    const applicationType = getQueryParameter("application_type") || "application/pdf";
-
-    if (!accessToken || !fileName) {
-        alert("Missing access_token or file_name.");
-        return;
     }
+ 
+    // Build an array [0,1,2,...,HowManyImagesInBuffer-1]
 
-    const uploadUrl = `https://graph.microsoft.com/${fileName}`;
+    function getAllImageIndices() {
 
-    try {
-        const response = await fetch(uploadUrl, {
-            method: "PUT",
-            headers: {
-                "Authorization": `Bearer ${accessToken}`,
-                "Content-Type": applicationType
-            },
-            body: scannedBlob
-        });
+        const count = DWTObject ? DWTObject.HowManyImagesInBuffer : 0;
 
-        if (response.ok) {
-            await response.json();
-            alert("File uploaded successfully!");
+        const indices = [];
 
-            try { DWTObject.RemoveAllImages(); } catch(e) {}
+        for (let i = 0; i < count; i++) indices.push(i);
 
-            updatePreview(); // resets scan count + preview
+        return indices;
+
+    }
+ 
+    // Create PDF combining all images in buffer and upload to OneDrive
+
+    async function createPdfAndUpload() {
+
+        if (!DWTObject) {
+
+            alert("Scanner control is not ready yet.");
+
+            return;
+
         }
-        else {
-            const text = await response.text();
-            alert("Upload failed:\n" + text);
+
+        const count = DWTObject.HowManyImagesInBuffer;
+
+        if (!count || count === 0) {
+
+            alert("No scanned pages in buffer. Please scan pages first.");
+
+            return;
+
         }
-    }
-    catch (err) {
-        alert("Unexpected error.");
-        console.error(err);
-    }
-}
+ 
+        const indices = getAllImageIndices();
+ 
+        try {
 
-/* ------------------ RESET ------------------ */
-function ResetContainer() {
-    try { DWTObject.RemoveAllImages(); } catch(e) {}
-    updatePreview();
-}
+            // Convert all indices to a single PDF blob
 
+            const blob = await DWTObject.ConvertToBlob(indices, Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF);
+ 
+            // Upload the blob to OneDrive (same API usage as your original function)
+
+            await uploadBlobToOneDrive(blob);
+
+        } catch (err) {
+
+            console.error("Error creating PDF or uploading:", err);
+
+            alert("Failed to create or upload PDF. See console for details.");
+
+        }
+
+    }
+ 
+    // Upload a blob to MS Graph (OneDrive)
+
+    async function uploadBlobToOneDrive(blob) {
+
+        const accessToken = getQueryParameter("access_token");
+
+        const fileName = getQueryParameter("file_name"); // full Graph path after domain
+
+        const applicationType = getQueryParameter("application_type") || "application/pdf";
+
+        if (!accessToken || !fileName) {
+
+            alert("Missing access_token or file_name in URL.");
+
+            return;
+
+        }
+ 
+        const uploadUrl = `https://graph.microsoft.com/${fileName}`;
+
+        try {
+
+            const response = await fetch(uploadUrl, {
+
+                method: "PUT",
+
+                headers: {
+
+                    "Authorization": `Bearer ${accessToken}`,
+
+                    "Content-Type": applicationType
+
+                },
+
+                body: blob
+
+            });
+ 
+            if (response.ok) {
+
+                const json = await response.json();
+
+                alert("File uploaded successfully to OneDrive!");
+
+                console.log("Upload successful. File URL:", json.webUrl);
+
+            } else {
+
+                const errorText = await response.text();
+
+                alert("Upload failed:\n" + errorText);
+
+                console.error("Upload failed:", errorText);
+
+            }
+
+        } catch (err) {
+
+            alert("An unexpected error occurred during upload. See console for details.");
+
+            console.error("Upload error:", err);
+
+        }
+
+    }
+ 
+    // Reset container (clear buffer and UI)
+
+    function ResetContainer() {
+
+        if (DWTObject && DWTObject.HowManyImagesInBuffer > 0) {
+
+            try {
+
+                // Remove all images from buffer
+
+                for (let i = DWTObject.HowManyImagesInBuffer - 1; i >= 0; i--) {
+
+                    DWTObject.RemoveImage(i);
+
+                }
+
+            } catch (err) {
+
+                console.warn("Error clearing buffer, will reload page instead.", err);
+
+                location.reload();
+
+                return;
+
+            }
+
+        }
+
+        updatePageCount();
+
+    }
+ 
+    function updatePageCount() {
+
+        const count = (DWTObject && DWTObject.HowManyImagesInBuffer) ? DWTObject.HowManyImagesInBuffer : 0;
+
+        document.getElementById("pageCount").innerText = "Pages: " + count;
+
+    }
+ 
+    // Optional: update page count periodically in case buffer changes elsewhere
+
+    setInterval(() => {
+
+        if (DWTObject) updatePageCount();
+
+    }, 800);
+ 
 </script>
 </body>
 </html>
+ 
